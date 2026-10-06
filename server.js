@@ -15,7 +15,9 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.get('/health', (_req, res) => res.json({ ok: true, rooms: rooms.size }));
 app.get('/api/questions', (_req, res) => res.json(questions.map(q => ({ id: q.id, question: q.question }))));
 
-const POINTS = [50, 40, 30, 20, 10, 5];
+const BASE_POINTS = [50, 40, 30, 20, 10, 5];
+const SECOND_CHANCE_MULTIPLIER = 0.9;
+const WRONG_PENALTY = 10;
 
 function roomCode() {
   let code;
@@ -25,154 +27,231 @@ function roomCode() {
 }
 function cleanName(name) { return String(name || '').trim().replace(/\s+/g, ' ').slice(0, 18); }
 function cleanAnswer(answer) { return String(answer || '').trim().replace(/\s+/g, ' ').slice(0, 100); }
+function secondChancePoints(points) { return Math.max(1, Math.round(points * SECOND_CHANCE_MULTIPLIER)); }
 function publicRoom(room) {
   return {
     code: room.code,
-    players: [...room.players.values()].map(p => ({ id: p.id, name: p.name, score: p.score, attempted: p.attempted, connected: p.connected })),
+    players: [...room.players.values()].map(p => ({ id: p.id, name: p.name, score: p.score, connected: p.connected })),
     status: room.status,
-    currentPlayerId: room.currentPlayerId,
     question: room.question ? { id: room.question.id, question: room.question.question } : null,
     revealed: room.revealed,
+    buzzWinnerId: room.buzzWinnerId,
+    answererId: room.answererId,
+    chance: room.chance,
     submittedAnswer: room.submittedAnswer,
     resolved: room.resolved,
-    winner: room.winner
+    lastResult: room.lastResult,
+    secondChancePoints: room.secondChancePoints
   };
 }
 function broadcast(room) { io.to(room.code).emit('room:update', publicRoom(room)); }
 function emitError(socket, message) { socket.emit('game:error', { message }); }
-function getRoom(socket, code) { const room = rooms.get(String(code || '').toUpperCase()); if (!room) emitError(socket, 'Room not found. Check the code and try again.'); return room; }
+function getRoom(socket, code) {
+  const room = rooms.get(String(code || '').toUpperCase());
+  if (!room) emitError(socket, 'Room not found. Check the code and try again.');
+  return room;
+}
 function resetRound(room, question) {
   room.question = question;
-  room.status = 'playing';
-  room.currentPlayerId = null;
+  room.status = 'buzzing';
   room.revealed = [];
+  room.buzzWinnerId = null;
+  room.answererId = null;
+  room.chance = 0;
   room.submittedAnswer = null;
   room.resolved = false;
-  room.winner = null;
-  room.players.forEach(p => { p.attempted = false; });
-}
-function nextEligible(room, fromId = null) {
-  const list = [...room.players.values()].filter(p => p.connected);
-  if (!list.length) return null;
-  let start = fromId ? Math.max(0, list.findIndex(p => p.id === fromId) + 1) : 0;
-  for (let i = 0; i < list.length; i++) {
-    const p = list[(start + i) % list.length];
-    if (!p.attempted) return p.id;
-  }
-  return null;
+  room.lastResult = null;
+  room.secondChancePoints = null;
 }
 function endRound(room) {
   room.status = 'ended';
-  room.currentPlayerId = null;
+  room.buzzWinnerId = null;
+  room.answererId = null;
   room.submittedAnswer = null;
   room.resolved = false;
+}
+function otherPlayerId(room, playerId) {
+  return [...room.players.values()].find(p => p.id !== playerId && p.connected)?.id || null;
 }
 
 io.on('connection', socket => {
   socket.on('host:create', () => {
     const code = roomCode();
-    const room = { code, hostId: socket.id, players: new Map(), status: 'lobby', question: null, revealed: [], currentPlayerId: null, submittedAnswer: null, resolved: false, winner: null };
+    const room = {
+      code,
+      hostId: socket.id,
+      players: new Map(),
+      status: 'lobby',
+      question: null,
+      revealed: [],
+      buzzWinnerId: null,
+      answererId: null,
+      chance: 0,
+      submittedAnswer: null,
+      resolved: false,
+      lastResult: null,
+      secondChancePoints: null
+    };
     rooms.set(code, room);
     socket.join(code);
-    socket.data.role = 'host'; socket.data.roomCode = code;
-    socket.emit('host:created', { code });
+    socket.data.role = 'host';
+    socket.data.roomCode = code;
+    socket.emit('host:created', { code, questions });
     broadcast(room);
   });
 
   socket.on('player:join', ({ code, name }) => {
     const room = getRoom(socket, code);
     if (!room) return;
-    if (room.status !== 'lobby') return emitError(socket, 'This game has already started.');
+    if (room.status !== 'lobby' && room.status !== 'selection') return emitError(socket, 'This game has already started.');
+    if (room.players.size >= 2) return emitError(socket, 'This game is limited to two competitors.');
     const clean = cleanName(name);
     if (!clean) return emitError(socket, 'Please enter your name.');
     if ([...room.players.values()].some(p => p.name.toLowerCase() === clean.toLowerCase())) return emitError(socket, 'That name is already in the room.');
-    const player = { id: socket.id, name: clean, score: 0, attempted: false, connected: true };
+    const player = { id: socket.id, name: clean, score: 0, connected: true };
     room.players.set(socket.id, player);
     socket.join(room.code);
-    socket.data.role = 'player'; socket.data.roomCode = room.code;
+    socket.data.role = 'player';
+    socket.data.roomCode = room.code;
     socket.emit('player:joined', { code: room.code, playerId: socket.id });
     broadcast(room);
+  });
+
+  socket.on('host:load-questions', ({ code }) => {
+    const room = getRoom(socket, code);
+    if (!room || room.hostId !== socket.id) return;
+    socket.emit('host:question-bank', { questions });
   });
 
   socket.on('host:start', ({ code, questionId }) => {
     const room = getRoom(socket, code);
     if (!room || room.hostId !== socket.id) return;
-    if (!room.players.size) return emitError(socket, 'Add at least one player before starting.');
-    const id = Number(questionId);
-    const question = questions.find(q => q.id === id);
+    if (room.players.size !== 2) return emitError(socket, 'Add exactly two competitors before starting.');
+    const question = questions.find(q => q.id === Number(questionId));
     if (!question) return emitError(socket, 'Please select a question first.');
     resetRound(room, question);
-    room.currentPlayerId = nextEligible(room);
+    socket.emit('host:round', { question });
     broadcast(room);
   });
 
   socket.on('host:question-select', ({ code }) => {
     const room = getRoom(socket, code);
     if (!room || room.hostId !== socket.id) return;
-    if (!room.players.size) return emitError(socket, 'Add at least one player before choosing a question.');
-    if (room.status === 'playing' && !room.resolved) return emitError(socket, 'Finish the current turn first.');
+    if (room.players.size !== 2) return emitError(socket, 'You need exactly two competitors.');
     room.status = 'selection';
     room.question = null;
     room.revealed = [];
-    room.currentPlayerId = null;
+    room.buzzWinnerId = null;
+    room.answererId = null;
+    room.chance = 0;
     room.submittedAnswer = null;
     room.resolved = false;
+    room.lastResult = null;
+    room.secondChancePoints = null;
+    broadcast(room);
+  });
+
+  socket.on('player:buzz', ({ code }) => {
+    const room = getRoom(socket, code);
+    if (!room || room.status !== 'buzzing') return emitError(socket, 'The buzzer is not open.');
+    if (!room.players.has(socket.id)) return;
+    if (room.players.size !== 2) return emitError(socket, 'The host needs two competitors.');
+    if (room.buzzWinnerId) return;
+    room.buzzWinnerId = socket.id;
+    room.answererId = socket.id;
+    room.chance = 1;
+    room.status = 'answering';
+    room.lastResult = { type: 'buzz', playerId: socket.id, name: room.players.get(socket.id).name };
+    broadcast(room);
+  });
+
+  socket.on('player:submit', ({ code, answer }) => {
+    const room = getRoom(socket, code);
+    if (!room || room.status !== 'answering') return emitError(socket, 'It is not answer time.');
+    if (room.answererId !== socket.id) return emitError(socket, 'You did not win the buzzer.');
+    if (room.submittedAnswer) return emitError(socket, 'Your answer is already locked.');
+    const clean = cleanAnswer(answer);
+    if (!clean) return emitError(socket, 'Type an answer before locking it in.');
+    room.submittedAnswer = clean;
+    room.status = 'host-review';
     broadcast(room);
   });
 
   socket.on('host:resolve', ({ code, answerIndex }) => {
     const room = getRoom(socket, code);
     if (!room || room.hostId !== socket.id) return;
-    if (room.status !== 'playing' || !room.currentPlayerId || !room.submittedAnswer || room.resolved) return emitError(socket, 'There is no answer waiting to be resolved.');
+    if (!['host-review'].includes(room.status) || !room.answererId || !room.submittedAnswer || room.resolved) return emitError(socket, 'There is no answer waiting to be resolved.');
     const index = Number(answerIndex);
     if (!Number.isInteger(index) || index < 0 || index >= 6 || room.revealed.includes(index)) return emitError(socket, 'That answer is unavailable.');
-    const player = room.players.get(room.currentPlayerId);
+    const player = room.players.get(room.answererId);
     const answer = room.question.answers[index];
-    player.score += answer.points;
-    player.attempted = true;
+    const points = room.chance === 1 ? answer.points : secondChancePoints(answer.points);
+    player.score += points;
     room.revealed.push(index);
     room.resolved = true;
+    room.lastResult = { type: 'correct', playerId: player.id, name: player.name, points, answerIndex: index, chance: room.chance };
+    room.status = 'ended';
     broadcast(room);
   });
 
   socket.on('host:wrong', ({ code }) => {
     const room = getRoom(socket, code);
     if (!room || room.hostId !== socket.id) return;
-    if (room.status !== 'playing' || !room.currentPlayerId || !room.submittedAnswer || room.resolved) return emitError(socket, 'There is no answer waiting to be resolved.');
-    const player = room.players.get(room.currentPlayerId);
-    if (player) player.attempted = true;
-    room.resolved = true;
+    if (room.status !== 'host-review' || !room.answererId || !room.submittedAnswer || room.resolved) return emitError(socket, 'There is no answer waiting to be marked wrong.');
+    const player = room.players.get(room.answererId);
+    if (player) player.score -= WRONG_PENALTY;
+    const firstWrong = room.chance === 1;
+    room.lastResult = { type: 'wrong', playerId: room.answererId, name: player?.name || 'Player', points: -WRONG_PENALTY, chance: room.chance };
+    room.submittedAnswer = null;
+    room.resolved = false;
+
+    if (firstWrong) {
+      const second = otherPlayerId(room, room.answererId);
+      if (second) {
+        room.answererId = second;
+        room.chance = 2;
+        room.status = 'answering';
+        room.secondChancePoints = BASE_POINTS.map(secondChancePoints);
+      } else {
+        endRound(room);
+      }
+    } else {
+      endRound(room);
+    }
     broadcast(room);
   });
 
   socket.on('host:next', ({ code }) => {
     const room = getRoom(socket, code);
     if (!room || room.hostId !== socket.id) return;
-    if (room.status !== 'playing' || !room.resolved) return emitError(socket, 'Resolve the current answer first.');
-    if (room.revealed.length === 6 || !nextEligible(room, room.currentPlayerId)) { endRound(room); broadcast(room); return; }
-    room.currentPlayerId = nextEligible(room, room.currentPlayerId);
+    if (room.status !== 'ended') return emitError(socket, 'Finish the question first.');
+    room.status = 'selection';
+    room.question = null;
+    room.revealed = [];
+    room.buzzWinnerId = null;
+    room.answererId = null;
+    room.chance = 0;
     room.submittedAnswer = null;
     room.resolved = false;
-    broadcast(room);
-  });
-
-  socket.on('player:submit', ({ code, answer }) => {
-    const room = getRoom(socket, code);
-    if (!room || room.status !== 'playing') return emitError(socket, 'The round is not accepting answers.');
-    if (room.currentPlayerId !== socket.id) return emitError(socket, 'It is not your turn.');
-    const player = room.players.get(socket.id);
-    if (!player || player.attempted || room.submittedAnswer) return emitError(socket, 'Your answer is already locked.');
-    const clean = cleanAnswer(answer);
-    if (!clean) return emitError(socket, 'Type an answer before locking it in.');
-    room.submittedAnswer = clean;
+    room.lastResult = null;
+    room.secondChancePoints = null;
     broadcast(room);
   });
 
   socket.on('host:reset', ({ code }) => {
     const room = getRoom(socket, code);
     if (!room || room.hostId !== socket.id) return;
-    room.status = 'lobby'; room.question = null; room.revealed = []; room.currentPlayerId = null; room.submittedAnswer = null; room.resolved = false;
-    room.players.forEach(p => { p.score = 0; p.attempted = false; });
+    room.status = 'lobby';
+    room.question = null;
+    room.revealed = [];
+    room.buzzWinnerId = null;
+    room.answererId = null;
+    room.chance = 0;
+    room.submittedAnswer = null;
+    room.resolved = false;
+    room.lastResult = null;
+    room.secondChancePoints = null;
+    room.players.forEach(p => { p.score = 0; });
     broadcast(room);
   });
 
@@ -187,14 +266,17 @@ io.on('connection', socket => {
       broadcast(room);
       return;
     }
-    const player = room.players.get(socket.id);
-    if (player) {
-      const wasCurrent = room.currentPlayerId === socket.id;
+    if (room.players.has(socket.id)) {
       room.players.delete(socket.id);
-      if (wasCurrent && room.status === 'playing') {
-        room.submittedAnswer = null; room.resolved = false;
-        room.currentPlayerId = nextEligible(room);
-        if (!room.currentPlayerId) endRound(room);
+      if (room.players.size < 2 && ['buzzing','answering','host-review'].includes(room.status)) {
+        room.status = 'lobby';
+        room.question = null;
+        room.revealed = [];
+        room.buzzWinnerId = null;
+        room.answererId = null;
+        room.chance = 0;
+        room.submittedAnswer = null;
+        room.resolved = false;
       }
       broadcast(room);
     }
