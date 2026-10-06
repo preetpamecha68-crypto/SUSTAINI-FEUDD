@@ -8,11 +8,13 @@ let room = null;
 let submittedLocal = false;
 let buzzedLocal = false;
 let questions = [];
+let hostQuestionBank = [];
+let hostRoundQuestion = null;
 let selectedQuestionId = null;
 let seenResultKey = null;
 
 const esc = value => String(value ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
-const getHostQuestion = () => questions.find(q => q.id === Number(room?.question?.id));
+const getHostQuestion = () => hostRoundQuestion || hostQuestionBank.find(q => q.id === Number(room?.question?.id)) || questions.find(q => q.id === Number(room?.question?.id));
 
 function notify(message) {
   toast.textContent = message;
@@ -40,17 +42,29 @@ function showJoin() {
   </div></section>`);
   document.getElementById('join-code')?.focus();
 }
+async function loadQuestionBank() {
+  try {
+    const res = await fetch('/api/questions', { cache: 'no-store' });
+    if (!res.ok) throw new Error('Question API unavailable');
+    const list = await res.json();
+    if (Array.isArray(list) && list.length) { questions = list; render(); }
+  } catch (e) {
+    // The socket host:question-bank event is the primary source; this is only a fallback.
+  }
+}
 function hostGame() { socket.emit('host:create'); }
+
 function joinGame(event) { event.preventDefault(); roomCode = document.getElementById('join-code').value.trim().toUpperCase(); const name = document.getElementById('join-name').value.trim(); socket.emit('player:join', { code: roomCode, name }); }
 
 function questionSelector() {
   const players = room?.players || [];
   const selected = questions.find(q => q.id === Number(selectedQuestionId));
   const statusText = room?.status === 'ended' ? 'QUESTION COMPLETE — CHOOSE THE NEXT ONE' : 'QUESTION SELECT';
+  const questionArea = questions.length ? `<div class="question-grid">${questions.map(q => `<button type="button" class="question-option ${Number(selectedQuestionId) === q.id ? 'selected' : ''}" onclick="selectQuestion(${q.id})"><span class="q-number">${String(q.id).padStart(2,'0')}</span><span class="q-copy">${esc(q.question)}</span><span class="q-arrow">${Number(selectedQuestionId) === q.id ? '✓' : '→'}</span></button>`).join('')}</div>` : `<div class="question-loading"><div class="loading-spinner"></div><strong>Loading your 33 questions…</strong><span>If this stays here, refresh the question bank.</span><button class="back-btn" type="button" onclick="loadQuestionBank()">↻ Refresh question bank</button></div>`;
   shell(`<section class="host-shell"><header class="game-header">${logo()}<div class="room-pill">ROOM <strong>${esc(roomCode)}</strong></div></header>
     <div class="selection-layout"><main class="question-picker-card"><div class="section-label">${statusText}</div><div class="picker-heading"><div><h1>Choose your question.</h1><p>Your exact survey questions are loaded. Each one has six hidden answers behind the board.</p></div><div class="question-total"><strong>${questions.length}</strong><span>QUESTIONS</span></div></div>
-      <div class="question-grid">${questions.map(q => `<button type="button" class="question-option ${Number(selectedQuestionId) === q.id ? 'selected' : ''}" onclick="selectQuestion(${q.id})"><span class="q-number">${String(q.id).padStart(2,'0')}</span><span class="q-copy">${esc(q.question)}</span><span class="q-arrow">${Number(selectedQuestionId) === q.id ? '✓' : '→'}</span></button>`).join('')}</div>
-      <div class="picker-footer"><div class="selected-preview">${selected ? `<span>SELECTED</span><strong>Q${String(selected.id).padStart(2,'0')}</strong><em>${esc(selected.question)}</em>` : '<span>NO QUESTION SELECTED</span>'}</div><button class="game-btn gold start-game" type="button" onclick="startSelectedRound()" ${players.length === 2 && selected ? '' : 'disabled'}>START SHOWDOWN <b>→</b></button></div>
+      ${questionArea}
+      <div class="picker-footer"><div class="selected-preview">${selected ? `<span>SELECTED</span><strong>Q${String(selected.id).padStart(2,'0')}</strong><em>${esc(selected.question)}</em>` : '<span>SELECT A QUESTION ABOVE</span>'}</div><button class="game-btn gold start-game" type="button" onclick="startSelectedRound()" ${players.length === 2 && selected ? '' : 'disabled'}>START SHOWDOWN <b>→</b></button></div>
     </main><aside class="roster-card"><div class="card-title"><span>COMPETITORS</span><strong>${players.length}/2</strong></div><div class="roster-list">${players.length ? players.map((p, i) => `<div class="roster-item"><span class="player-number">${String(i+1).padStart(2,'0')}</span><span class="player-avatar">${esc(p.name.charAt(0).toUpperCase())}</span><strong>${esc(p.name)}</strong><span class="online-dot"></span></div>`).join('') : `<div class="empty-roster"><span>Waiting for competitors</span><small>Two players are required.</small></div>`}</div><div class="roster-note">Players only see the question and their buzzer. The six answers stay hidden until you reveal one.</div></aside></div>
   </section>`);
 }
@@ -136,7 +150,9 @@ function render() {
   else playerView();
 }
 
-socket.on('host:created', data => { mode = 'host'; roomCode = data.code; questions = data.questions || []; render(); });
+socket.on('host:created', data => { mode = 'host'; roomCode = data.code; questions = data.questions || []; hostQuestionBank = data.questions || []; hostRoundQuestion = null; render(); socket.emit('host:load-questions', { code: roomCode }); loadQuestionBank(); });
+socket.on('host:question-bank', data => { hostQuestionBank = data.questions || []; questions = hostQuestionBank.map(q => ({ id: q.id, question: q.question })); render(); });
+socket.on('host:round', data => { hostRoundQuestion = data.question || null; render(); });
 socket.on('player:joined', data => { mode = 'player'; roomCode = data.code; playerId = data.playerId; submittedLocal = false; buzzedLocal = false; });
 socket.on('room:update', data => {
   const oldStatus = room?.status;
