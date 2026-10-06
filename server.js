@@ -13,6 +13,7 @@ const rooms = new Map();
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/health', (_req, res) => res.json({ ok: true, rooms: rooms.size }));
+app.get('/api/questions', (_req, res) => res.json(questions.map(q => ({ id: q.id, question: q.question }))));
 
 const POINTS = [50, 40, 30, 20, 10, 5];
 
@@ -97,10 +98,25 @@ io.on('connection', socket => {
     const room = getRoom(socket, code);
     if (!room || room.hostId !== socket.id) return;
     if (!room.players.size) return emitError(socket, 'Add at least one player before starting.');
-    const question = questionId ? questions.find(q => q.id === Number(questionId)) : questions[Math.floor(Math.random() * questions.length)];
-    if (!question) return emitError(socket, 'Question not found.');
+    const id = Number(questionId);
+    const question = questions.find(q => q.id === id);
+    if (!question) return emitError(socket, 'Please select a question first.');
     resetRound(room, question);
     room.currentPlayerId = nextEligible(room);
+    broadcast(room);
+  });
+
+  socket.on('host:question-select', ({ code }) => {
+    const room = getRoom(socket, code);
+    if (!room || room.hostId !== socket.id) return;
+    if (!room.players.size) return emitError(socket, 'Add at least one player before choosing a question.');
+    if (room.status === 'playing' && !room.resolved) return emitError(socket, 'Finish the current turn first.');
+    room.status = 'selection';
+    room.question = null;
+    room.revealed = [];
+    room.currentPlayerId = null;
+    room.submittedAnswer = null;
+    room.resolved = false;
     broadcast(room);
   });
 
