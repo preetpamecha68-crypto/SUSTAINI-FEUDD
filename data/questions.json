@@ -1,0 +1,122 @@
+[
+  {
+    "id": 1,
+    "question": "Name something people can do to save water.",
+    "answers": [
+      {"text":"Turn off taps","points":50,"aliases":["turn off the tap","close the tap","shut the tap","don't leave taps running"]},
+      {"text":"Take shorter showers","points":40,"aliases":["shorter showers","short showers","reduce shower time"]},
+      {"text":"Fix leaks","points":30,"aliases":["repair leaks","fix leaking taps","repair a leak"]},
+      {"text":"Reuse water","points":20,"aliases":["reuse wastewater","use water again","recycle water"]},
+      {"text":"Collect rainwater","points":10,"aliases":["rainwater harvesting","harvest rainwater","collect rain water"]},
+      {"text":"Run full loads","points":5,"aliases":["full loads in washing machine","full dishwasher loads","use full loads"]}
+    ]
+  },
+  {
+    "id": 2,
+    "question": "Name something people can recycle.",
+    "answers": [
+      {"text":"Paper","points":50,"aliases":["newspapers","cardboard","paper waste"]},
+      {"text":"Plastic bottles","points":40,"aliases":["plastic","plastic bottle","bottles"]},
+      {"text":"Glass","points":30,"aliases":["glass bottles","jars"]},
+      {"text":"Metal cans","points":20,"aliases":["cans","aluminium cans","metal"]},
+      {"text":"E-waste","points":10,"aliases":["electronics","electronic waste","old phones"]},
+      {"text":"Clothes","points":5,"aliases":["textiles","old clothes","fabric"]}
+    ]
+  },
+  {
+    "id": 3,
+    "question": "Name something people can do to save electricity.",
+    "answers": [
+      {"text":"Switch off lights","points":50,"aliases":["turn off lights","turn lights off","lights off"]},
+      {"text":"Use LED bulbs","points":40,"aliases":["led lights","LED"]},
+      {"text":"Unplug devices","points":30,"aliases":["switch off plugs","unplug chargers","remove plugs"]},
+      {"text":"Use natural light","points":20,"aliases":["daylight","sunlight","open curtains"]},
+      {"text":"Use fans instead of AC","points":10,"aliases":["fan instead of air conditioning","use a fan","less AC"]},
+      {"text":"Buy efficient appliances","points":5,"aliases":["energy efficient appliances","energy star appliances","efficient devices"]}
+    ]
+  },
+  {
+    "id": 4,
+    "question": "Name a way to reduce plastic waste.",
+    "answers": [
+      {"text":"Carry a reusable bottle","points":50,"aliases":["reusable water bottle","use a reusable bottle"]},
+      {"text":"Use cloth bags","points":40,"aliases":["reusable bags","carry cloth bags","tote bags"]},
+      {"text":"Avoid single-use plastics","points":30,"aliases":["avoid plastic","no single use plastic","reduce single use plastic"]},
+      {"text":"Use reusable containers","points":20,"aliases":["reusable boxes","tiffin","reusable lunch boxes"]},
+      {"text":"Refill instead of buying new","points":10,"aliases":["refill","refill packs","refill products"]},
+      {"text":"Choose loose produce","points":5,"aliases":["unpackaged produce","avoid plastic packaging"]}
+    ]
+  },
+  {
+    "id": 5,
+    "question": "Name something people can do to make their college greener.",
+    "answers": [
+      {"text":"Reduce paper use","points":50,"aliases":["go digital","less paper","digital notes"]},
+      {"text":"Segregate waste","points":40,"aliases":["separate waste","waste segregation","sort garbage"]},
+      {"text":"Use reusable bottles","points":30,"aliases":["reusable water bottles","bring a bottle"]},
+      {"text":"Plant more trees","points":20,"aliases":["plant trees","more greenery","tree plantation"]},
+      {"text":"Use public transport","points":10,"aliases":["public transit","bus","train"]},
+      {"text":"Compost food waste","points":5,"aliases":["composting","compost"]}
+    ]
+  },
+  {
+    "id": 6,
+    "question": "Name something people can do instead of using a car.",
+    "answers": [
+      {"text":"Walk","points":50,"aliases":["walking","go on foot"]},
+      {"text":"Take public transport","points":40,"aliases":["bus","train","metro","public transit"]},
+      {"text":"Cycle","points":30,"aliases":["cycling","bike","bicycle"]},
+      {"text":"Carpool","points":20,"aliases":["share a ride","ride sharing","pool a car"]},
+      {"text":"Use an electric scooter","points":10,"aliases":["e scooter","scooter","electric scooter"]},
+      {"text":"Work or study remotely","points":5,"aliases":["remote work","online classes","work from home"]}
+    ]
+  },
+  {
+    "id": 7,
+    "question": "Name a sustainable habit students can adopt.",
+    "answers": [
+      {"text":"Carry reusables","points":50,"aliases":["reusable items","carry reusable things"]},
+      {"text":"Avoid food waste","points":40,"aliases":["reduce food waste","don't waste food"]},
+      {"text":"Use public transport","points":30,"aliases":["bus","train","metro"]},
+      {"text":"Save electricity","points":20,"aliases":["conserve electricity","use less power"]},
+      {"text":"Recycle","points":10,"aliases":["recycling","recycle waste"]},
+      {"text":"Buy only what you need","points":5,"aliases":["buy less","conscious shopping","mindful shopping"]}
+    ]
+  },
+  {
+    "id": 8,
+    "question": "Name something that can be reused instead of thrown away.",
+    "answers": [
+      {"text":"Glass jars","points":50,"aliases":["jars","glass containers"]},
+      {"text":"Clothes","points":40,"aliases":["old clothes","clothing"]},
+      {"text":"Bottles","points":30,"aliases":["water bottles","plastic bottles"]},
+      {"text":"Containers","points":20,"aliases":["food containers","boxes","tiffins"]},
+      {"text":"Paper","points":10,"aliases":["scrap paper","paper sheets"]},
+      {"text":"Furniture","points":5,"aliases":["old furniture","chairs","tables"]}
+    ]
+  },
+  {
+    "id": 9,
+    "question": "Name something people associate with climate change.",
+    "answers": [
+      {"text":"Rising temperatures","points":50,"aliases":["global warming","hotter weather","heat"]},
+      {"text":"Melting glaciers","points":40,"aliases":["melting ice","melting ice caps","glaciers melting"]},
+      {"text":"Extreme weather","points":30,"aliases":["storms","heat waves","floods","droughts"]},
+      {"text":"Rising sea levels","points":20,"aliases":["sea level rise","higher sea levels"]},
+      {"text":"Carbon emissions","points":10,"aliases":["greenhouse gases","CO2","carbon dioxide"]},
+      {"text":"Deforestation","points":5,"aliases":["cutting trees","loss of forests"]}
+    ]
+  },
+  {
+    "id": 10,
+    "question": "Name a renewable source of energy.",
+    "answers": [
+      {"text":"Solar","points":50,"aliases":["solar energy","sun","solar power"]},
+      {"text":"Wind","points":40,"aliases":["wind energy","wind power"]},
+      {"text":"Hydropower","points":30,"aliases":["hydro","water power","hydroelectric"]},
+      {"text":"Geothermal","points":20,"aliases":["geothermal energy"]},
+      {"text":"Biomass","points":10,"aliases":["bioenergy","biomass energy"]},
+      {"text":"Tidal","points":5,"aliases":["tidal energy","ocean energy","wave energy"]}
+    ]
+  }
+]
