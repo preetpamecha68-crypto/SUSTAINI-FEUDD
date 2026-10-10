@@ -1,4 +1,4 @@
-[README.md](https://github.com/user-attachments/files/33276286/README.md)
+[README.md](https://github.com/user-attachments/files/33276492/README.md)
 # SUSTAINI-FEUD
 
 A real-time, Family-Feud-style live game show for Sustainicity. One host runs the show from a laptop/projector and up to **40 participants** join from their phones using a 5-character room code.
@@ -8,8 +8,9 @@ A real-time, Family-Feud-style live game show for Sustainicity. One host runs th
 - Supports up to **40 participants per room** (minimum 2 to start).
 - Automatically shuffles the question bank and asks the next question when the host starts or advances a round. The host never selects a question manually.
 - Questions are not repeated until the current shuffled question cycle has been used. The next cycle is shuffled again and avoids repeating the immediately previous question.
-- The first participant to buzz gets the answer turn. If their answer is marked wrong, the buzzer reopens for participants who have not yet answered that question.
-- A participant gets one attempt per question. A correct answer ends the round.
+- The first participant to buzz gets the answer turn. While that person answers or the host reviews the response, every other participant can buzz and enter a private first-buzz-first-served queue. The UI never displays queue positions.
+- Participants can buzz again after their previous turn has passed, but cannot duplicate a buzz while they are currently answering or already queued.
+- A correct answer awards points and reveals that board answer; the next queued participant automatically gets the turn. Play continues until all six answers are found or the host/OC ends the round early.
 - The host judges the typed response by clicking the matching unrevealed answer, or marks it wrong. The answer timer starts when a participant wins the buzzer and gives them 30 seconds to submit. A separate 30-second host-review timer prevents the host decision from hanging indefinitely.
 - Correct answers award their listed board points: **50 / 40 / 30 / 20 / 10 / 5**.
 - Wrong answers deduct 10 points, but scores cannot fall below zero.
@@ -40,8 +41,8 @@ Open `http://localhost:3000`. Create a room on the host device and share the roo
 
 - **Start Showdown** automatically selects a shuffled question and opens the buzzer.
 - Click an unrevealed answer tile after a participant submits a response to award its points.
-- **Mark Wrong** deducts 10 points (not below zero) and reopens the buzzer for participants who have not yet tried.
-- **Next Random Question** starts the next question after the current round ends.
+- **Mark Wrong** deducts 10 points (not below zero) and advances to the next queued participant, if any.
+- **End Round · Next Question** lets the host/OC end an active round at any time and start the next shuffled question, even if fewer than six answers have been found. A confirmation prompt helps prevent accidental skips.
 - **Reset Game** clears scores and returns the room to the lobby.
 
 ## Operational notes
