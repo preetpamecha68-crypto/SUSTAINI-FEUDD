@@ -95,6 +95,7 @@ function publicRoom(room) {
     buzzWinnerId: room.buzzWinnerId,
     answererId: room.answererId,
     triedPlayerIds: [...room.triedPlayerIds],
+    buzzQueueCount: room.buzzQueue.length,
     submittedAnswer: room.submittedAnswer,
     lastResult: room.lastResult,
     winnerId: room.winnerId,
@@ -119,6 +120,7 @@ function resetRound(room, question) {
   room.buzzWinnerId = null;
   room.answererId = null;
   room.triedPlayerIds = new Set();
+  room.buzzQueue = [];
   room.submittedAnswer = null;
   room.lastResult = null;
   room.winnerId = null;
@@ -134,6 +136,24 @@ function endRound(room) {
 function eligiblePlayers(room) {
   return [...room.players.values()].filter(p => p.connected && !room.triedPlayerIds.has(p.id));
 }
+function startQueuedPlayer(room) {
+  clearTurnTimer(room);
+  room.buzzWinnerId = null;
+  room.answererId = null;
+  room.submittedAnswer = null;
+  while (room.buzzQueue.length) {
+    const nextId = room.buzzQueue.shift();
+    const player = room.players.get(nextId);
+    if (!player || !player.connected) continue;
+    room.buzzWinnerId = nextId;
+    room.answererId = nextId;
+    room.status = 'answering';
+    room.lastResult = { type: 'buzz', playerId: nextId, name: player.name };
+    startTurnTimer(room, ANSWER_TIME_MS, 'answering');
+    return true;
+  }
+  return false;
+}
 function reopenBuzzerOrEnd(room) {
   clearTurnTimer(room);
   room.buzzWinnerId = null;
@@ -143,12 +163,9 @@ function reopenBuzzerOrEnd(room) {
     endRound(room);
     return;
   }
-  if (eligiblePlayers(room).length) {
-    room.status = 'buzzing';
-    return;
-  }
-  // Once everyone has had a turn, open another anonymous buzzer cycle so the
-  // game can continue until all six board answers have been found.
+  // Players who buzzed while another answer was in progress are served in
+  // first-buzz order, but the queue and positions are never broadcast.
+  if (startQueuedPlayer(room)) return;
   const connectedPlayers = [...room.players.values()].some(p => p.connected);
   if (connectedPlayers) {
     room.triedPlayerIds = new Set();
@@ -201,7 +218,7 @@ io.on('connection', socket => {
     const code = roomCode();
     const room = {
       code, hostId: socket.id, hostToken: crypto.randomBytes(24).toString('hex'), players: new Map(), disconnectedPlayers: new Map(), status: 'lobby', question: null,
-      revealed: [], buzzWinnerId: null, answererId: null, triedPlayerIds: new Set(),
+      revealed: [], buzzWinnerId: null, answererId: null, triedPlayerIds: new Set(), buzzQueue: [],
       submittedAnswer: null, lastResult: null, winnerId: null, winnerName: null,
       roundNumber: 0, questionBag: shuffledQuestionIds(), lastQuestionId: null, cleanupTimer: null, turnTimer: null, turnDeadline: null
     };
@@ -268,6 +285,7 @@ io.on('connection', socket => {
     const wasAnswerer = room.answererId === oldId;
     const remainingTurnMs = room.turnDeadline ? Math.max(1, room.turnDeadline - Date.now()) : ANSWER_TIME_MS;
     if (room.triedPlayerIds.has(oldId)) { room.triedPlayerIds.delete(oldId); room.triedPlayerIds.add(socket.id); }
+    room.buzzQueue = room.buzzQueue.map(id => id === oldId ? socket.id : id);
     if (room.answererId === oldId) room.answererId = socket.id;
     if (room.buzzWinnerId === oldId) room.buzzWinnerId = socket.id;
     player.id = socket.id; player.connected = true;
@@ -307,14 +325,20 @@ io.on('connection', socket => {
     if (!isPayload(payload)) return emitError(socket, 'Invalid buzzer request.');
     const room = getRoom(socket, payload.code);
     if (!room || !isPlayer(socket, room)) return;
-    if (room.status !== 'buzzing') return emitError(socket, 'The buzzer is not open yet.');
-    if (room.triedPlayerIds.has(socket.id)) return emitError(socket, 'You have already had a turn this question.');
+    if (!['buzzing', 'answering', 'host-review'].includes(room.status)) return emitError(socket, 'The buzzer is not open for this question.');
     if (!room.players.get(socket.id)?.connected) return emitError(socket, 'Reconnect before buzzing.');
-    room.buzzWinnerId = socket.id;
-    room.answererId = socket.id;
-    room.status = 'answering';
-    startTurnTimer(room, ANSWER_TIME_MS, 'answering');
-    room.lastResult = { type: 'buzz', playerId: socket.id, name: room.players.get(socket.id).name };
+    if (room.answererId === socket.id || room.triedPlayerIds.has(socket.id) || room.buzzQueue.includes(socket.id)) return emitError(socket, 'Your buzz is already recorded for this turn cycle.');
+    room.triedPlayerIds.add(socket.id);
+    if (room.status === 'buzzing' && !room.answererId) {
+      room.buzzWinnerId = socket.id;
+      room.answererId = socket.id;
+      room.status = 'answering';
+      room.lastResult = { type: 'buzz', playerId: socket.id, name: room.players.get(socket.id).name };
+      startTurnTimer(room, ANSWER_TIME_MS, 'answering');
+    } else {
+      room.buzzQueue.push(socket.id);
+      room.lastResult = { type: 'queued', playerId: socket.id };
+    }
     broadcast(room);
   });
 
@@ -375,11 +399,31 @@ io.on('connection', socket => {
     if (!room || !isHost(socket, room)) return;
     clearTurnTimer(room);
     room.status = 'lobby'; room.question = null; room.revealed = []; room.buzzWinnerId = null;
-    room.answererId = null; room.triedPlayerIds = new Set(); room.submittedAnswer = null;
+    room.answererId = null; room.triedPlayerIds = new Set(); room.buzzQueue = []; room.submittedAnswer = null;
     room.lastResult = null; room.winnerId = null; room.winnerName = null; room.roundNumber = 0;
     room.questionBag = shuffledQuestionIds(); room.lastQuestionId = null;
     room.players.forEach(p => { p.score = 0; });
     broadcast(room);
+  });
+
+  socket.on('session:leave', payload => {
+    if (!isPayload(payload)) return;
+    const room = getRoom(socket, payload.code);
+    if (!room || socket.data.roomCode !== room.code) return;
+    if (isHost(socket, room)) {
+      destroyRoom(room, 'The host left the game.');
+      return;
+    }
+    if (isPlayer(socket, room)) {
+      const wasAnswerer = room.answererId === socket.id;
+      room.buzzQueue = room.buzzQueue.filter(id => id !== socket.id);
+      room.triedPlayerIds.delete(socket.id);
+      room.players.delete(socket.id);
+      socket.leave(room.code);
+      delete socket.data.roomCode; delete socket.data.role;
+      if (wasAnswerer && ['answering', 'host-review'].includes(room.status)) reopenBuzzerOrEnd(room);
+      broadcast(room);
+    }
   });
 
   socket.on('disconnect', () => {
@@ -399,6 +443,7 @@ io.on('connection', socket => {
     if (room.players.has(socket.id)) {
       const player = room.players.get(socket.id);
       const wasAnswerer = room.answererId === socket.id;
+      room.buzzQueue = room.buzzQueue.filter(id => id !== socket.id);
       room.players.delete(socket.id);
       player.connected = false;
       const entry = { player, oldId: socket.id, timer: null };
