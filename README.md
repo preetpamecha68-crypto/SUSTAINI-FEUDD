@@ -1,4 +1,4 @@
-[README.md](https://github.com/user-attachments/files/33276109/README.md)
+[README.md](https://github.com/user-attachments/files/33276286/README.md)
 # SUSTAINI-FEUD
 
 A real-time, Family-Feud-style live game show for Sustainicity. One host runs the show from a laptop/projector and up to **40 participants** join from their phones using a 5-character room code.
