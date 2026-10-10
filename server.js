@@ -1,3 +1,4 @@
+
 'use strict';
 const path = require('path');
 const http = require('http');
@@ -105,6 +106,15 @@ function publicRoom(room) {
 function broadcast(room, refreshExpiry = true) {
   if (refreshExpiry && room.status !== 'host-disconnected') scheduleCleanup(room, ROOM_TTL_MS);
   io.to(room.code).emit('room:update', publicRoom(room));
+  // Send each player their own round-use status privately; never expose the queue or its order.
+  for (const player of room.players.values()) {
+    if (player.connected) {
+      io.to(player.id).emit('player:round-status', {
+        roundNumber: room.roundNumber,
+        hasUsedTurn: room.triedPlayerIds.has(player.id)
+      });
+    }
+  }
 }
 function isHost(socket, room) { return room.hostId === socket.id && socket.data.role === 'host' && socket.data.roomCode === room.code; }
 function isPlayer(socket, room) { return room.players.has(socket.id) && socket.data.role === 'player' && socket.data.roomCode === room.code; }
@@ -164,9 +174,9 @@ function reopenBuzzerOrEnd(room) {
   // Players who buzzed while another answer was in progress are served in
   // first-buzz order, but the queue and positions are never broadcast.
   if (startQueuedPlayer(room)) return;
-  const connectedPlayers = [...room.players.values()].some(p => p.connected);
-  if (connectedPlayers) {
-    room.triedPlayerIds = new Set();
+  // A player may take only one turn per question. Do not clear triedPlayerIds here.
+  // Reopen buzzing only if at least one connected player has not used their turn.
+  if (eligiblePlayers(room).length > 0) {
     room.status = 'buzzing';
   } else {
     endRound(room);
@@ -328,7 +338,8 @@ io.on('connection', socket => {
     if (!room || !isPlayer(socket, room)) return;
     if (!['buzzing', 'answering', 'host-review'].includes(room.status)) return emitError(socket, 'The buzzer is not open for this question.');
     if (!room.players.get(socket.id)?.connected) return emitError(socket, 'Reconnect before buzzing.');
-    if (room.answererId === socket.id || room.buzzQueue.includes(socket.id)) return emitError(socket, 'Your buzz is already recorded for this turn.');
+    if (room.triedPlayerIds.has(socket.id)) return emitError(socket, 'You have already buzzed this round. Wait for the next question.');
+    if (room.answererId === socket.id || room.buzzQueue.includes(socket.id)) return emitError(socket, 'Your buzz is already recorded for this round.');
     room.triedPlayerIds.add(socket.id);
     if (room.status === 'buzzing' && !room.answererId) {
       room.buzzWinnerId = socket.id;
