@@ -9,3 +9,8 @@
 
 /* Authoritative 30-second answer countdown */
 .turn-timer-card{display:flex;align-items:center;justify-content:center;gap:10px;padding:12px 15px;margin:0 0 14px;border:1px solid #b8f36b55;border-radius:14px;background:linear-gradient(120deg,#b8f36b12,#b8f36b05);color:var(--mint);font-family:'Space Grotesk',sans-serif}.turn-timer-card span{font-size:9px;font-weight:700;letter-spacing:.12em;color:#9bb7a4}.turn-timer-card strong{font-size:32px;line-height:1;font-weight:700;font-variant-numeric:tabular-nums;min-width:42px;text-align:center}.turn-timer-card small{font-size:8px;font-weight:700;letter-spacing:.12em;color:#9bb7a4}.turn-timer-card.review-timer{border-color:#f4ce6b66;color:var(--gold);background:#f4ce6b0b}.turn-timer-card strong.urgent{color:var(--red);animation:timerPulse .65s infinite alternate}.mobile-turn-timer{width:100%;margin:0 0 16px}.mobile-turn-timer strong{font-size:38px}@keyframes timerPulse{from{opacity:1;transform:scale(1)}to{opacity:.65;transform:scale(1.08)}}
+
+/* Always-available home navigation; the queue's order is never displayed. */
+.floating-home{position:fixed;z-index:80;top:14px;right:14px;display:inline-flex;align-items:center;gap:7px;padding:10px 13px;border:1px solid #b8f36b55;border-radius:11px;background:#0b211dee;color:var(--mint);font:700 10px 'Space Grotesk',sans-serif;letter-spacing:.1em;box-shadow:0 8px 25px #0004;backdrop-filter:blur(10px)}
+.floating-home:hover{background:#183b2c}.phone-home-link{border:0;background:transparent;color:var(--mint);font:700 8px 'Space Grotesk';letter-spacing:.1em;padding:0}.queue-buzz-btn{margin:0 0 18px;min-height:58px}
+@media(max-width:520px){.floating-home{top:8px;right:8px;padding:8px 10px;font-size:9px}.phone-card-head{padding-right:62px}}
