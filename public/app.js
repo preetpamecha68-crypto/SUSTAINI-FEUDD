@@ -1,3 +1,4 @@
+
 'use strict';
 const socket = io({ reconnection: true, reconnectionAttempts: 8, reconnectionDelay: 500 });
 const app = document.getElementById('app');
@@ -127,12 +128,18 @@ socket.on('room:update', data => {
   if (oldRoundNumber !== room.roundNumber) buzzedLocal = false;
   if (mode === 'host' && room.question) hostRoundQuestion = hostQuestionBank.find(q => q.id === Number(room.question.id)) || hostRoundQuestion;
   if (mode === 'player') {
-    if (room.answererId !== oldAnswerer && room.answererId === playerId) { submittedLocal = false; buzzedLocal = false; }
+    if (room.answererId !== oldAnswerer && room.answererId === playerId) { submittedLocal = false; }
     const result = room.lastResult; const key = result ? `${result.type}-${result.playerId}-${result.points}-${room.roundNumber}-${room.status}` : null;
     if (result && key !== seenResultKey && result.type === 'wrong' && result.playerId === playerId) showWrongOverlay(result.name, result.points, room.status === 'buzzing');
     if (result && key !== seenResultKey && result.type === 'correct' && result.playerId === playerId) showCorrectOverlay(result.name, result.points, room.status === 'ended');
     seenResultKey = key;
   }
+  render();
+});
+socket.on('player:round-status', data => {
+  if (mode !== 'player' || !data || data.roundNumber !== room?.roundNumber) return;
+  // Server is authoritative, including after reconnect or page refresh.
+  buzzedLocal = Boolean(data.hasUsedTurn);
   render();
 });
 socket.on('host:disconnected', () => { if (mode === 'player') { room = { ...(room || {}), status: 'host-disconnected' }; playerView(); } });
