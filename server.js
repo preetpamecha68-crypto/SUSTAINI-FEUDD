@@ -94,8 +94,6 @@ function publicRoom(room) {
     revealed: [...room.revealed],
     buzzWinnerId: room.buzzWinnerId,
     answererId: room.answererId,
-    triedPlayerIds: [...room.triedPlayerIds],
-    buzzQueueCount: room.buzzQueue.length,
     submittedAnswer: room.submittedAnswer,
     lastResult: room.lastResult,
     winnerId: room.winnerId,
@@ -313,9 +311,12 @@ io.on('connection', socket => {
     if (!isPayload(payload)) return emitError(socket, 'Invalid next-question request.');
     const room = getRoom(socket, payload.code);
     if (!room || !isHost(socket, room)) return;
-    if (room.status !== 'ended') return emitError(socket, 'Finish the current question first.');
+    if (!room.question || !['buzzing', 'answering', 'host-review', 'ended'].includes(room.status)) {
+      return emitError(socket, 'There is no active round to advance.');
+    }
     const activePlayers = [...room.players.values()].filter(p => p.connected);
     if (activePlayers.length < 2) return emitError(socket, 'At least 2 connected participants are needed to continue.');
+    // The host/OC may end the current round early; resetRound clears its timer and queue.
     resetRound(room, nextQuestion(room));
     socket.emit('host:round', { question: room.question });
     broadcast(room);
@@ -327,7 +328,7 @@ io.on('connection', socket => {
     if (!room || !isPlayer(socket, room)) return;
     if (!['buzzing', 'answering', 'host-review'].includes(room.status)) return emitError(socket, 'The buzzer is not open for this question.');
     if (!room.players.get(socket.id)?.connected) return emitError(socket, 'Reconnect before buzzing.');
-    if (room.answererId === socket.id || room.triedPlayerIds.has(socket.id) || room.buzzQueue.includes(socket.id)) return emitError(socket, 'Your buzz is already recorded for this turn cycle.');
+    if (room.answererId === socket.id || room.buzzQueue.includes(socket.id)) return emitError(socket, 'Your buzz is already recorded for this turn.');
     room.triedPlayerIds.add(socket.id);
     if (room.status === 'buzzing' && !room.answererId) {
       room.buzzWinnerId = socket.id;
